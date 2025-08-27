@@ -9,7 +9,7 @@ import uuid
 
 # Set page configuration
 st.set_page_config(
-    page_title="SwechaKosam",
+    page_title="Swecha-Kosam",
     page_icon="🎙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -88,11 +88,25 @@ st.markdown("""
         border-radius: 5px;
         margin-bottom: 1rem;
     }
+    .otp-section {
+        background-color: #E8F8F5;
+        border-radius: 10px;
+        padding: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-top: 2rem;
+    }
+    .consent-checkbox {
+        background-color: #FEF9E7;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # App header
-st.markdown('<h1 class="main-header">🎙️ Swecha Corpus Platform</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-header">🎙️ Swecha-Kosam</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align: center; font-size: 1.2rem; color: #7D6608;">Preserving Telugu stories and voices for future generations</p>', unsafe_allow_html=True)
 
 # Initialize session state for authentication
 if 'authenticated' not in st.session_state:
@@ -105,10 +119,63 @@ if 'phone' not in st.session_state:
     st.session_state.phone = None
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
+if 'otp_sent' not in st.session_state:
+    st.session_state.otp_sent = False
+if 'login_method' not in st.session_state:
+    st.session_state.login_method = None
 
 # API Functions
+def send_otp(phone_number):
+    """Send OTP to the provided phone number"""
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        response = requests.post(
+            f"{API_BASE_URL}/api/v1/auth/login/send-otp",
+            headers=headers,
+            json={"phone_number": phone_number}
+        )
+        
+        # Add detailed error logging
+        print(f"Status Code: {response.status_code}")
+        print(f"Response Text: {response.text}")
+        
+        if response.status_code == 200:
+            return {"success": True, "message": "OTP sent successfully"}
+        else:
+            return {"success": False, "error": f"Failed to send OTP: {response.text}"}
+    except Exception as e:
+        return {"success": False, "error": f"Connection error: {str(e)}"}
+    
+def verify_otp(phone_number, otp_code, has_given_consent):
+    """Verify OTP and login user"""
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/api/v1/auth/login/verify-otp",
+            json={
+                "phone_number": phone_number,
+                "otp_code": otp_code,
+                "has_given_consent": has_given_consent
+            }
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "success": True, 
+                "token": data.get("access_token"), 
+                "username": phone_number,
+                "user_id": data.get("user_id")
+            }
+        else:
+            return {"success": False, "error": f"OTP verification failed: {response.text}"}
+    except Exception as e:
+        return {"success": False, "error": f"Connection error: {str(e)}"}
+
 def login_user(phone, password):
-    """Authenticate user with the API"""
+    """Authenticate user with password"""
     try:
         response = requests.post(
             f"{API_BASE_URL}/api/v1/auth/login",
@@ -175,6 +242,83 @@ def get_leaderboard_data(token):
     except Exception as e:
         return {"success": False, "error": f"Connection error: {str(e)}"}
 
+#This fun is to get user profile
+def get_user_by_id(token, user_id):
+    """Get a specific user by ID using the confirmed endpoint"""
+    try:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        # Use the confirmed endpoint
+        endpoint = f"{API_BASE_URL}/api/v1/users/{user_id}"
+        
+        response = requests.get(
+            endpoint,
+            headers=headers,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {"success": True, "data": data}
+        else:
+            return {"success": False, "error": f"Failed to get user: {response.status_code} - {response.text}"}
+        
+    except Exception as e:
+        return {"success": False, "error": f"Connection error: {str(e)}"}
+    
+#This function is to get users contribution
+def get_user_records(token, user_id, limit=10, skip=0):
+    """Get records for a specific user with pagination"""
+    try:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        params = {
+            "user_id": user_id,
+            "limit": limit,
+            "skip": skip
+        }
+        
+        endpoint = f"{API_BASE_URL}/api/v1/records"
+        
+        response = requests.get(
+            endpoint,
+            headers=headers,
+            params=params,
+            timeout=10
+        )
+        
+        # Log the response for debugging
+        print(f"Records API Response Status: {response.status_code}")
+        if response.status_code != 200:
+            print(f"Records API Response Text: {response.text}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {"success": True, "data": data}
+        elif response.status_code == 404:
+            return {"success": False, "error": "Records not found."}
+        elif response.status_code == 401:
+            return {"success": False, "error": "Authentication failed. Please login again."}
+        elif response.status_code == 403:
+            return {"success": False, "error": "You don't have permission to access these records."}
+        else:
+            return {"success": False, "error": f"Server error: {response.status_code} - {response.text}"}
+        
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Please try again."}
+    except requests.exceptions.ConnectionError:
+        return {"success": False, "error": "Connection error. Please check your internet connection."}
+    except Exception as e:
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
 def get_stories_data(token, similar_to=None):
     """Fetch stories data from API"""
     try:
@@ -219,7 +363,7 @@ def get_user_profile(token, user_id):
 
 # Sidebar for navigation
 with st.sidebar:
-    st.image("https://via.placeholder.com/150x50/2E86C1/FFFFFF?text=Swecha+Corpus", use_column_width=True)
+    st.image("https://via.placeholder.com/150x50/2E86C1/FFFFFF?text=Swecha-Kosam", use_column_width=True)
     st.markdown("## Navigation")
     
     if st.session_state.authenticated:
@@ -230,7 +374,9 @@ with st.sidebar:
             st.session_state.user_token = None
             st.session_state.phone = None
             st.session_state.user_id = None
-            st.experimental_rerun()
+            st.session_state.otp_sent = False
+            st.session_state.login_method = None
+            st.rerun()
     else:
         st.info("Please login to access all features")
     
@@ -242,45 +388,123 @@ with st.sidebar:
     st.markdown("- 👥 User Profiles")
     
     st.markdown("---")
-    st.markdown("### About")
-    st.markdown("Swecha Corpus is a platform for collecting and sharing audio stories in various languages.")
+    st.markdown("### About Swecha-Kosam")
+    st.markdown("Swecha-Kosam is dedicated to preserving Telugu stories and voices for future generations through community contributions.")
 
 # Main content area
 if not st.session_state.authenticated:
-    # Login section
-    st.markdown('<div class="login-section">', unsafe_allow_html=True)
-    st.markdown('<h2 class="sub-header">Login</h2>', unsafe_allow_html=True)
+    # Login section with tabs for different login methods
+    login_tab, otp_tab = st.tabs(["Password Login", "OTP Login"])
     
-    with st.form("login_form"):
-        phone = st.text_input("Phone Number", placeholder="Enter your registered phone number")
-        password = st.text_input("Password", type="password", placeholder="Enter your password")
-        submit_button = st.form_submit_button("Login")
+    with login_tab:
+        st.markdown('<div class="login-section">', unsafe_allow_html=True)
+        st.markdown('<h2 class="sub-header">Password Login</h2>', unsafe_allow_html=True)
         
-        if submit_button:
-            if phone and password:
-                with st.spinner("Authenticating..."):
-                    result = login_user(phone, password)
-                    if result["success"]:
-                        st.session_state.authenticated = True
-                        st.session_state.user_token = result["token"]
-                        st.session_state.phone = phone
-                        st.session_state.username = phone
-                        st.session_state.user_id = result.get("user_id")
-                        st.markdown('<div class="success-message">Login successful!</div>', unsafe_allow_html=True)
-                        time.sleep(1)
-                        st.experimental_rerun()
+        with st.form("login_form"):
+            phone = st.text_input("Phone Number", placeholder="Enter your registered phone number")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            submit_button = st.form_submit_button("Login")
+            
+            if submit_button:
+                if phone and password:
+                    with st.spinner("Authenticating..."):
+                        result = login_user(phone, password)
+                        if result["success"]:
+                            st.session_state.authenticated = True
+                            st.session_state.user_token = result["token"]
+                            st.session_state.phone = phone
+                            st.session_state.username = phone
+                            st.session_state.user_id = result.get("user_id")
+                            st.session_state.login_method = "password"
+                            st.markdown('<div class="success-message">Login successful!</div>', unsafe_allow_html=True)
+                            time.sleep(1)
+                            st.experimental_rerun()
+                        else:
+                            st.markdown(f'<div class="error-message">{result["error"]}</div>', unsafe_allow_html=True)
+                else:
+                    st.warning("Please enter both phone number and password")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with otp_tab:
+        st.markdown('<div class="login-section">', unsafe_allow_html=True)
+        st.markdown('<h2 class="sub-header">OTP Login</h2>', unsafe_allow_html=True)
+        
+        if not st.session_state.otp_sent:
+            # OTP request form
+            with st.form("otp_request_form"):
+                phone_otp = st.text_input("Phone Number", placeholder="Enter your phone number", key="otp_phone")
+                send_otp_button = st.form_submit_button("Send OTP")
+                
+                if send_otp_button:
+                    if phone_otp:
+                        with st.spinner("Sending OTP..."):
+                            result = send_otp(phone_otp)
+                            if result["success"]:
+                                st.session_state.otp_sent = True
+                                st.session_state.phone = phone_otp
+                                st.markdown('<div class="success-message">OTP sent successfully!</div>', unsafe_allow_html=True)
+                                st.experimental_rerun()
+                            else:
+                                st.markdown(f'<div class="error-message">{result["error"]}</div>', unsafe_allow_html=True)
                     else:
-                        st.markdown(f'<div class="error-message">{result["error"]}</div>', unsafe_allow_html=True)
-            else:
-                st.warning("Please enter both phone number and password")
-    st.markdown('</div>', unsafe_allow_html=True)
+                        st.warning("Please enter your phone number")
+        else:
+            # OTP verification form
+            st.markdown('<div class="otp-section">', unsafe_allow_html=True)
+            st.info(f"OTP sent to {st.session_state.phone}")
+            
+            with st.form("otp_verify_form"):
+                otp_code = st.text_input("Enter OTP", placeholder="Enter the OTP you received")
+                
+                # Consent checkbox
+                st.markdown('<div class="consent-checkbox">', unsafe_allow_html=True)
+                consent = st.checkbox("I consent to the terms and conditions and privacy policy")
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                verify_otp_button = st.form_submit_button("Verify OTP")
+                
+                if verify_otp_button:
+                    if otp_code and consent:
+                        with st.spinner("Verifying OTP..."):
+                            result = verify_otp(st.session_state.phone, otp_code, consent)
+                            if result["success"]:
+                                st.session_state.authenticated = True
+                                st.session_state.user_token = result["token"]
+                                st.session_state.username = st.session_state.phone
+                                st.session_state.user_id = result.get("user_id")
+                                st.session_state.login_method = "otp"
+                                st.markdown('<div class="success-message">Login successful!</div>', unsafe_allow_html=True)
+                                time.sleep(1)
+                                st.experimental_rerun()
+                            else:
+                                st.markdown(f'<div class="error-message">{result["error"]}</div>', unsafe_allow_html=True)
+                    else:
+                        if not otp_code:
+                            st.warning("Please enter the OTP")
+                        if not consent:
+                            st.warning("Please consent to the terms and conditions")
+            
+            if st.button("Request New OTP"):
+                st.session_state.otp_sent = False
+                st.experimental_rerun()
+                
+            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Features preview
+    st.markdown('<h2 class="sub-header">Welcome to Swecha-Kosam</h2>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <p>Join us in preserving Telugu stories and voices for future generations.</p>
+        <p>Contribute your stories, listen to others, and help build a rich cultural archive.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown('<div class="feature-card">', unsafe_allow_html=True)
         st.markdown("### 🎙️ Record Stories")
-        st.markdown("Contribute to the corpus by recording your own stories")
+        st.markdown("Contribute to the corpus by recording your own Telugu stories")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
@@ -399,7 +623,7 @@ else:
                     st.markdown('</div>', unsafe_allow_html=True)
     
     with tab3:
-        st.markdown('<h2 class="sub-header">Discover Similar Stories</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="sub-header">Discover Telugu Stories</h2>', unsafe_allow_html=True)
         
         # Fetch stories data from API
         with st.spinner("Loading stories..."):
@@ -457,10 +681,10 @@ else:
             
             mock_stories = [
                 {"id": 1, "title": "The Village Festival", "language": "Telugu", "duration": "4:25", "speaker": "storylover23", "plays": 142, "description": "A story about traditional village festivals in Andhra Pradesh"},
-                {"id": 2, "title": "Grandmother's Folktales", "language": "Hindi", "duration": "7:18", "speaker": "voicemaster", "plays": 128, "description": "Classic folktales passed down through generations"},
-                {"id": 3, "title": "Harvest Season", "language": "Telugu", "duration": "5:42", "speaker": "telugutales", "plays": 115, "description": "The significance of harvest season in rural communities"},
-                {"id": 4, "title": "Monsoon Memories", "language": "English", "duration": "6:05", "speaker": "culturalkeeper", "plays": 98, "description": "Personal memories of monsoon seasons growing up"},
-                {"id": 5, "title": "Traditional Recipes", "language": "Tamil", "duration": "8:32", "speaker": "heritagevoice", "plays": 87, "description": "Traditional recipes and their cultural significance"}
+                {"id": 2, "title": "Grandmother's Folktales", "language": "Telugu", "duration": "7:18", "speaker": "voicemaster", "plays": 128, "description": "Classic Telugu folktales passed down through generations"},
+                {"id": 3, "title": "Harvest Season", "language": "Telugu", "duration": "5:42", "speaker": "telugutales", "plays": 115, "description": "The significance of harvest season in rural Telugu communities"},
+                {"id": 4, "title": "Monsoon Memories", "language": "Telugu", "duration": "6:05", "speaker": "culturalkeeper", "plays": 98, "description": "Personal memories of monsoon seasons growing up in Telangana"},
+                {"id": 5, "title": "Traditional Recipes", "language": "Telugu", "duration": "8:32", "speaker": "heritagevoice", "plays": 87, "description": "Traditional Telugu recipes and their cultural significance"}
             ]
             
             for story in mock_stories:
@@ -477,61 +701,158 @@ else:
     with tab4:
         st.markdown('<h2 class="sub-header">Your Profile</h2>', unsafe_allow_html=True)
         
-        # Fetch user profile data from API
-        with st.spinner("Loading profile..."):
-            profile_data = get_user_profile(st.session_state.user_token, st.session_state.user_id)
-        
-        if profile_data["success"]:
-            user_data = profile_data["data"]
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                st.subheader("Profile Information")
-                st.markdown(f"**Username:** {user_data.get('username', st.session_state.username)}")
-                st.markdown(f"**Phone:** {user_data.get('phone', st.session_state.phone)}")
-                st.markdown(f"**Contributions:** {user_data.get('contributions', st.session_state.get('contributions', 0))}")
-                st.markdown(f"**Member since:** {user_data.get('join_date', '2023-01-01')}")
-                
-                if user_data.get('badges'):
-                    st.subheader("Badges")
-                    for badge in user_data['badges']:
-                        st.markdown(f"🏆 {badge}")
-            
-            with col2:
-                st.subheader("Your Recent Stories")
-                user_stories = user_data.get('stories', [])
-                
-                if not user_stories:
-                    st.info("You haven't uploaded any stories yet. Record your first story in the Record tab!")
-                else:
-                    for story in user_stories[:5]:  # Show only recent 5 stories
-                        st.markdown(f"**{story.get('title', 'Untitled Story')}**")
-                        st.markdown(f"*{story.get('language', 'Unknown')} • {story.get('duration', 'N/A')} • {story.get('plays', 0)} plays*")
-                        st.markdown("---")
+        if not st.session_state.authenticated:
+            st.warning("Please login to view your profile")
         else:
-            st.markdown(f'<div class="error-message">{profile_data["error"]}</div>', unsafe_allow_html=True)
-            # Fallback to mock data if API fails
-            st.info("Showing sample profile (real data would come from API)")
+            # Initialize session state for pagination
+            if 'records_page' not in st.session_state:
+                st.session_state.records_page = 1
+            if 'records_per_page' not in st.session_state:
+                st.session_state.records_per_page = 5
             
-            col1, col2 = st.columns([1, 2])
+            # Check if we need to fetch or refresh profile data
+            if 'user_profile' not in st.session_state or st.button("Refresh Profile"):
+                with st.spinner("Loading your profile..."):
+                    profile_data = get_user_by_id(st.session_state.user_token, st.session_state.user_id)
+                    
+                    if profile_data["success"]:
+                        st.session_state.user_profile = profile_data["data"]
+                    
+                    # Also load user's records/contributions
+                    records_data = get_user_records(
+                        st.session_state.user_token, 
+                        st.session_state.user_id,
+                        limit=st.session_state.records_per_page,
+                        skip=(st.session_state.records_page - 1) * st.session_state.records_per_page
+                    )
+                    
+                    if records_data["success"]:
+                        st.session_state.user_records = records_data["data"]
+                        st.session_state.records_loaded = True
+                        st.success("Profile and contributions loaded successfully!")
+                    else:
+                        st.error(f"Failed to load contributions: {records_data['error']}")
+                        st.session_state.user_records = []
             
-            with col1:
-                st.subheader("Profile Information")
-                st.markdown(f"**Username:** {st.session_state.username}")
-                st.markdown(f"**Phone:** {st.session_state.phone}")
-                st.markdown(f"**Contributions:** {st.session_state.get('contributions', 1)}")
-                st.markdown("**Member since:** 2023-01-01")
+            # Display profile information if available
+            if 'user_profile' in st.session_state and st.session_state.user_profile:
+                user_data = st.session_state.user_profile
                 
-                st.subheader("Badges")
-                st.markdown("🏆 First Contribution")
-                if st.session_state.get('contributions', 0) > 5:
-                    st.markdown("🏆 Consistent Contributor")
+                # Create a two-column layout
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.subheader("Profile Information") 
+                    
+                    # Display user details with fallback values - using correct JSON field names
+                    st.markdown(f"**Name:** {user_data.get('name', 'Not provided')}")
+                    st.markdown(f"**Phone:** {user_data.get('phone', 'Not provided')}")
+                    st.markdown(f"**Email:** {user_data.get('email', 'Not provided')}")
+                    st.markdown(f"**Gender:** {user_data.get('gender', 'Not specified')}")
+                    st.markdown(f"**Date of Birth:** {user_data.get('date_of_birth', 'Not provided')}")
+                    st.markdown(f"**Place:** {user_data.get('place', 'Not specified')}")
+                    # Display contribution stats if available
+                    contributions = user_data.get('contributions', st.session_state.get('contributions', 0))
+                    st.markdown(f"**Contributions:** {contributions}")
+                    
+                    # Display join date if available
+                    join_date = user_data.get('created_at', user_data.get('join_date', '2023-01-01'))
+                    st.markdown(f"**Member since:** {join_date}")
+                    
+                    # Display last active if available
+                    last_active = user_data.get('last_active', user_data.get('updated_at', 'Today'))
+                    st.markdown(f"**Last active:** {last_active}")
+                    
+                    # Badges section
+                    st.subheader("Achievements")
+                    badges = user_data.get('badges', [])
+                    if badges:
+                        for badge in badges:
+                            st.markdown(f"🏆 {badge}")
+                    else:
+                        st.info("No badges yet. Keep contributing to earn badges!")
+                        
+                    # Login method
+                    st.markdown(f"**Login method:** {st.session_state.login_method}")
+                
+                with col2:
+                    st.subheader("Your Contributions")
+                    
+                    # Pagination controls
+                    col_a, col_b, col_c = st.columns([2, 1, 1])
+                    with col_a:
+                        st.markdown(f"**Page {st.session_state.records_page}**")
+                    with col_b:
+                        if st.button("⬅️ Previous") and st.session_state.records_page > 1:
+                            st.session_state.records_page -= 1
+                            st.experimental_rerun()
+                    with col_c:
+                        if st.button("Next ➡️"):
+                            st.session_state.records_page += 1
+                            st.experimental_rerun()
+                    
+                    # Check if user has records/contributions
+                    if 'user_records' in st.session_state and st.session_state.user_records:
+                        records = st.session_state.user_records
+                        
+                        for i, record in enumerate(records):
+                            with st.expander(f"{record.get('title', 'Untitled Recording')}", expanded=i==0):
+                                # Create columns for metadata
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.markdown(f"**Language:** {record.get('language', 'Unknown')}")
+                                    st.markdown(f"**Category:** {record.get('category', 'Uncategorized')}")
+                                with col2:
+                                    st.markdown(f"**Duration:** {record.get('duration', 'N/A')}")
+                                    st.markdown(f"**Uploaded:** {record.get('created_at', 'Unknown')}")
+                                
+                                # Description if available
+                                if record.get('description'):
+                                    st.markdown(f"**Description:** {record['description']}")
+                                
+                                # Audio player if URL is available
+                                if record.get('audio_url'):
+                                    st.audio(record['audio_url'], format='audio/mp3')
+                                else:
+                                    st.info("Audio preview not available")
+                                
+                                # Play count if available
+                                if record.get('play_count'):
+                                    st.markdown(f"**Played {record['play_count']} times**")
+                                
+                                # Tags if available
+                                if record.get('tags'):
+                                    tags = ", ".join(record['tags'])
+                                    st.markdown(f"**Tags:** {tags}")
+                    else:
+                        st.info("You haven't made any contributions yet. Record your first story in the Record tab!")
+                        
+                        # Quick action button
+                        if st.button("🎤 Record Your First Story"):
+                            # Switch to the Record tab
+                            st.session_state.current_tab = "Record"
+                            st.experimental_rerun()
             
-            with col2:
-                st.subheader("Your Recent Stories")
-                if st.session_state.get('contributions', 0) > 0:
-                    st.markdown("**The Village Festival**")
-                    st.markdown("*Telugu • 4:25 • 142 plays*")
-                    st.markdown("---")
-                else:
-                    st.info("You haven't uploaded any stories yet. Record your first story in the Record tab!")
+            else:
+                st.info("Your profile information will appear here once loaded.")
+                
+                # Manual load option
+                if st.button("Load My Profile"):
+                    with st.spinner("Loading your profile..."):
+                        profile_data = get_user_by_id(st.session_state.user_token, st.session_state.user_id)
+                        
+                        if profile_data["success"]:
+                            st.session_state.user_profile = profile_data["data"]
+                        
+                        # Also load user's records
+                        records_data = get_user_records(
+                            st.session_state.user_token, 
+                            st.session_state.user_id,
+                            limit=5
+                        )
+                        
+                        if records_data["success"]:
+                            st.session_state.user_records = records_data["data"]
+                            st.session_state.records_loaded = True
+                        
+                        st.experimental_rerun()
