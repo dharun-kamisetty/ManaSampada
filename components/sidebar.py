@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.auth import logout_user
+
 
 def render_sidebar():
     """Render the application sidebar"""
@@ -8,10 +8,8 @@ def render_sidebar():
         st.markdown("## Navigation")
         
         if st.session_state.authenticated:
-            st.success(f"Logged in as **{st.session_state.phone}**")
-            if st.button("Logout"):
-                logout_user()
-                st.experimental_rerun()
+            st.success(f"Logged in as **{st.session_state.name}**")
+            
         else:
             st.info("Please login to access all features")
         
@@ -23,5 +21,5 @@ def render_sidebar():
         st.markdown("- 👥 User Profile")
         
         st.markdown("---")
-        st.markdown("### About Swecha-Kosam")
-        st.markdown("Preserving Telugu cultural heritage through community contributions.")
+        st.markdown("### About Mana-Sampada")
+        st.markdown("Preserving our cultural heritage through community contributions.")

@@ -1,63 +1,13 @@
 import requests
+import uuid
 from config import API_BASE_URL
-
-def get_user_by_id(token, user_id):
-    """Get a specific user by ID"""
-    try:
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        
-        endpoint = f"{API_BASE_URL}/api/v1/users/{user_id}"
-        
-        response = requests.get(
-            endpoint,
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            return {"success": True, "data": data}
-        else:
-            return {"success": False, "error": f"Failed to get user: {response.status_code} - {response.text}"}
-        
-    except Exception as e:
-        return {"success": False, "error": f"Connection error: {str(e)}"}
-
-def get_user_contributions(token, user_id, media_type=None):
-    """Get user contributions using the dedicated endpoint"""
-    try:
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        
-        if media_type:
-            endpoint = f"{API_BASE_URL}/api/v1/users/{user_id}/contributions/{media_type}"
-        else:
-            endpoint = f"{API_BASE_URL}/api/v1/users/{user_id}/contributions"
-        
-        response = requests.get(
-            endpoint,
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            return {"success": True, "data": data}
-        else:
-            return {"success": False, "error": f"Failed to get contributions: {response.status_code} - {response.text}"}
-        
-    except Exception as e:
-        return {"success": False, "error": f"Connection error: {str(e)}"}
+import os
 
 def get_categories(token):
     """Get all available categories"""
+    if not token:
+        return {"success": False, "error": "No authentication token provided"}
+    
     try:
         headers = {
             "Authorization": f"Bearer {token}",
@@ -82,8 +32,14 @@ def get_categories(token):
     except Exception as e:
         return {"success": False, "error": f"Connection error: {str(e)}"}
 
-def create_monument_record(token, title, description, location, latitude=None, longitude=None, category_id=None, tags=None):
-    """Create a monument record"""
+def get_category_by_id(token, category_id):
+    """Get a specific category by ID with better error handling"""
+    if not token:
+        return {"success": False, "error": "No authentication token provided"}
+    
+    if not category_id:
+        return {"success": False, "error": "No category ID provided"}
+    
     try:
         headers = {
             "Authorization": f"Bearer {token}",
@@ -91,131 +47,165 @@ def create_monument_record(token, title, description, location, latitude=None, l
             "Accept": "application/json"
         }
         
-        payload = {
-            "title": title,
-            "description": description,
-            "location": location,
-            "type": "monument",
-            "media_type": "image_audio"
-        }
+        endpoint = f"{API_BASE_URL}/api/v1/categories/{category_id}"
         
-        if latitude and longitude:
-            payload["latitude"] = latitude
-            payload["longitude"] = longitude
-        
-        if category_id:
-            payload["category_id"] = category_id
-        
-        if tags:
-            if isinstance(tags, str):
-                tags = [tag.strip() for tag in tags.split(",")]
-            payload["tags"] = tags
-        
-        endpoint = f"{API_BASE_URL}/api/v1/records/"
-        
-        response = requests.post(
+        response = requests.get(
             endpoint,
             headers=headers,
-            json=payload,
             timeout=10
         )
         
-        if response.status_code in [200, 201]:
+        if response.status_code == 200:
             data = response.json()
-            return {"success": True, "data": data, "record_id": data.get("id")}
+            return {"success": True, "data": data}
         else:
-            return {"success": False, "error": f"Failed to create record: {response.status_code} - {response.text}"}
+            return {"success": False, "error": f"Failed to get category: {response.status_code} - {response.text}"}
         
     except Exception as e:
         return {"success": False, "error": f"Connection error: {str(e)}"}
-
-def upload_monument_files(token, record_id, image_file, audio_file):
-    """Upload files for a monument record"""
+    
+def upload_chunk(token, chunk_data, filename, chunk_index, total_chunks, upload_uuid):
+    """Upload a file chunk to the API (only binary data)"""
     try:
         headers = {
             "Authorization": f"Bearer {token}"
         }
         
+        # Prepare form data for chunk upload - CORRECTED parameter name to upload_uuid
         files = {
-            'image': ('monument.jpg', image_file, 'image/jpeg'),
-            'audio': ('recording.webm', audio_file, 'audio/webm')
+            'chunk': (filename, chunk_data, 'application/octet-stream'),
+            'chunk_index': (None, str(chunk_index)),
+            'total_chunks': (None, str(total_chunks)),
+            'upload_uuid': (None, upload_uuid),  # CORRECTED: Changed from upload_usid to upload_uuid
+            'filename': (None, filename)
         }
         
-        endpoints = [
-            f"{API_BASE_URL}/api/v1/records/{record_id}/upload",
-            f"{API_BASE_URL}/api/v1/records/upload",
-            f"{API_BASE_URL}/api/v1/records/{record_id}/files"
-        ]
+        endpoint = f"{API_BASE_URL}/api/v1/records/upload/chunk"
         
-        for endpoint in endpoints:
-            try:
-                response = requests.post(
-                    endpoint,
-                    files=files,
-                    headers=headers,
-                    timeout=30
-                )
-                
-                if response.status_code in [200, 201]:
-                    return {"success": True, "message": "Files uploaded successfully!"}
-                elif response.status_code != 404:
-                    return {"success": False, "error": f"Upload failed: {response.status_code} - {response.text}"}
-            except:
-                continue
+        response = requests.post(
+            endpoint,
+            files=files,
+            headers=headers,
+            timeout=30
+        )
         
-        return {"success": False, "error": "All endpoint attempts failed"}
+        if response.status_code in [200, 201]:
+            return {"success": True, "message": "Chunk uploaded successfully", "data": response.json()}
+        else:
+            return {"success": False, "error": f"Chunk upload failed: {response.status_code} - {response.text}"}
         
     except Exception as e:
         return {"success": False, "error": f"Connection error: {str(e)}"}
 
-def process_audio(task_token, record_id):
-    """Start audio processing for a record"""
+def finalize_upload(token, title, description, category_id, user_id, media_type, 
+                   upload_uuid, filename, total_chunks, language, release_rights="creator",
+                   latitude=None, longitude=None, use_uid_filename=True):
+    """Finalize the upload and create the record with metadata"""
     try:
         headers = {
-            "Authorization": f"Bearer {task_token}",
+            "Authorization": f"Bearer {token}"
+        }
+        
+        # Prepare form data with CORRECT enum values
+        data = {
+            "title": title,
+            "description": description,
+            "category_id": category_id,
+            "user_id": user_id,
+            "media_type": media_type,  # Should be: 'text', 'audio', 'video' or 'image'
+            "upload_uuid": upload_uuid,
+            "filename": filename,
+            "total_chunks": total_chunks,
+            "language": language,  # Should be Indian language codes
+            "release_rights": release_rights,  # Should be: 'creator', 'family_or_friend', 'downloaded' or 'NA'
+            "use_uid_filename": str(use_uid_filename).lower()
+        }
+        
+        # Add optional fields
+        if latitude is not None:
+            data["latitude"] = str(latitude)
+        if longitude is not None:
+            data["longitude"] = str(longitude)
+        
+        endpoint = f"{API_BASE_URL}/api/v1/records/upload"
+        
+        response = requests.post(
+            endpoint,
+            data=data,
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code in [200, 201]:
+            return {"success": True, "message": "Record created successfully", "data": response.json()}
+        else:
+            return {"success": False, "error": f"Record creation failed: {response.status_code} - {response.text}"}
+        
+    except Exception as e:
+        return {"success": False, "error": f"Connection error: {str(e)}"}
+    
+def get_user_records(token, user_id=None, category_id=None, media_type=None, skip=0, limit=10):
+    """Get records with filtering options"""
+    try:
+        headers = {
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
         
-        endpoint = f"{API_BASE_URL}/api/v1/tasks/process-audio/{record_id}"
+        params = {
+            "skip": skip,
+            "limit": limit
+        }
         
-        response = requests.post(
+        # Add optional filters
+        if user_id:
+            params["user_id"] = user_id
+        if category_id:
+            params["category_id"] = category_id
+        if media_type:
+            params["media_type"] = media_type
+        
+        endpoint = f"{API_BASE_URL}/api/v1/records"
+        
+        response = requests.get(
+            endpoint,
+            headers=headers,
+            params=params,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {"success": True, "data": data}
+        else:
+            return {"success": False, "error": f"Failed to get records: {response.status_code} - {response.text}"}
+        
+    except Exception as e:
+        return {"success": False, "error": f"Connection error: {str(e)}"}
+
+def get_user_by_id(token, user_id):
+    """Get user profile by ID"""
+    try:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        endpoint = f"{API_BASE_URL}/api/v1/users/{user_id}"
+        
+        response = requests.get(
             endpoint,
             headers=headers,
             timeout=10
         )
         
-        if response.status_code in [200, 202]:
+        if response.status_code == 200:
             data = response.json()
-            return {"success": True, "data": data, "task_id": data.get("task_id")}
+            return {"success": True, "data": data}
         else:
-            return {"success": False, "error": f"Failed to start audio processing: {response.status_code} - {response.text}"}
-        
-    except Exception as e:
-        return {"success": False, "error": f"Connection error: {str(e)}"}
-
-def analyze_content(task_token, record_id):
-    """Start content analysis for a record"""
-    try:
-        headers = {
-            "Authorization": f"Bearer {task_token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        
-        endpoint = f"{API_BASE_URL}/api/v1/tasks/analyze-content/{record_id}"
-        
-        response = requests.post(
-            endpoint,
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code in [200, 202]:
-            data = response.json()
-            return {"success": True, "data": data, "task_id": data.get("task_id")}
-        else:
-            return {"success": False, "error": f"Failed to start content analysis: {response.status_code} - {response.text}"}
+            return {"success": False, "error": f"Failed to get user: {response.status_code} - {response.text}"}
         
     except Exception as e:
         return {"success": False, "error": f"Connection error: {str(e)}"}
