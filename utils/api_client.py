@@ -31,6 +31,22 @@ def get_categories(token):
         
     except Exception as e:
         return {"success": False, "error": f"Connection error: {str(e)}"}
+    
+def get_category_name(category_id):
+    """Convert category ID to category name using our fixed categories"""
+    if not category_id:
+        return "Uncategorized"
+    
+    # Check our fixed categories
+    fixed_categories = {
+        "ab7f2757-ccdf-4ef6-9850-2cdfe6e1b422": "Local History",
+        "ab9fa2ce-1f83-4e91-b89d-cca18e8b301e": "Culture",
+        "4366cab1-031e-4b37-816b-311ee34461a9": "Images", 
+        "94a13c20-8a03-45da-8829-10e2fe1e61a1": "Architecture",
+        "96e5104f-c786-4928-b932-f59f5b4ddbf0": "Places"
+    }
+    
+    return fixed_categories.get(category_id, f"Category ({str(category_id)[:8]}...)")
 
 def get_category_by_id(token, category_id):
     """Get a specific category by ID with better error handling"""
@@ -144,8 +160,8 @@ def finalize_upload(token, title, description, category_id, user_id, media_type,
     except Exception as e:
         return {"success": False, "error": f"Connection error: {str(e)}"}
     
-def get_user_records(token, user_id=None, category_id=None, media_type=None, skip=0, limit=10):
-    """Get records with filtering options"""
+def get_user_records(token, user_id=None, category_id=None, media_type=None, skip=0, limit=100):
+    """Get records with filtering options - FIXED VERSION"""
     try:
         headers = {
             "Authorization": f"Bearer {token}",

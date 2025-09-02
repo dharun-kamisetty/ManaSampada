@@ -10,6 +10,7 @@ from utils.helpers import initialize_session_state, load_categories
 from components import render_header, render_sidebar, render_login_forms
 from components import render_record_tab, render_profile_tab
 from components import render_contributions_tab
+from components.ai_chat import render_ai_chat_tab
 
 # Set page configuration
 st.set_page_config(
@@ -114,7 +115,7 @@ def main():
             st.sidebar.info(f"Loaded {len(st.session_state.categories)} categories")
         
         # Create main interface tabs
-        tab1, tab2, tab3 = st.tabs(["📸 Document Heritage", "📊 My Contributions", "👤 My Profile"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📸 Document Heritage", "📊 My Contributions", "🤖 AI Assistant","👤 My Profile"])
         
         with tab1:
             render_record_tab()
@@ -123,6 +124,9 @@ def main():
             render_contributions_tab()  # ✅ FIXED: This was load_categories() before
         
         with tab3:
+            render_ai_chat_tab()
+
+        with tab4:
             render_profile_tab()
 
 if __name__ == "__main__":

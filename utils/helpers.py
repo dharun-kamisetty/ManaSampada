@@ -34,8 +34,9 @@ def check_authentication():
     return False
 
 def load_categories():
-    """Load categories - using the specific sample categories provided"""
-    sample_categories = [
+    """Load the fixed sample categories we're focused on"""
+    # Use the specific sample categories provided
+    st.session_state.categories = [
         {
             "name": "local_history",
             "title": "Local History", 
@@ -78,10 +79,6 @@ def load_categories():
         }
     ]
     
-    import streamlit as st
-    st.session_state.categories = sample_categories
-    return True
-
 def format_date(date_string):
     """Format date string to readable format"""
     if not date_string:

@@ -1,34 +1,38 @@
 import streamlit as st
 import requests
 import os
-from utils.helpers import generate_upload_uuid
+from utils.helpers import generate_upload_uuid, load_categories
 from utils.api_client import get_categories, get_category_by_id, upload_chunk, finalize_upload
+from utils.ai_helper import get_cultural_insight
 from config import LANGUAGES, RELEASE_RIGHTS
 import time
 
-def render_record_tab():
-    """Render the cultural heritage recording interface with proper chunked upload"""
-    st.markdown('<h2 class="sub-header">Document Cultural Heritage</h2>', unsafe_allow_html=True)
+# Add the missing function implementations
+load_categories()
+
+def render_media_capture_interface():
+    """Render media capture interface"""
+    st.subheader("1. Capture Image of Heritage Site")
     
-    if not st.session_state.authenticated:
-        st.warning("Please login to document cultural heritage")
-        return
+    # Image capture
+    captured_image = st.camera_input("Take a photo of the temple, mosque, church, or other cultural site", key="heritage_camera")
     
-    # Load categories with error handling
-    if 'categories' not in st.session_state or not st.session_state.categories:
-        from utils.helpers import load_categories
-        success = load_categories()
-        if not success:
-            st.error("Failed to load categories. Please try refreshing the page.")
-            if st.button("🔄 Refresh Categories"):
-                if 'categories' in st.session_state:
-                    del st.session_state.categories
-                st.experimental_rerun()
-            return
+    # File upload alternative
+    uploaded_file = st.file_uploader("Or upload an image file", type=["jpg", "jpeg", "png"])
     
-    # Create interface
-    render_media_capture_interface()
-    render_heritage_form()
+    if captured_image is not None:
+        st.session_state.captured_image = captured_image
+        st.success("✅ Photo captured successfully!")
+        st.image(captured_image, use_column_width=True, caption="Captured Image")
+    elif uploaded_file is not None:
+        st.session_state.captured_image = uploaded_file
+        st.success("✅ File uploaded successfully!")
+        st.image(uploaded_file, use_column_width=True, caption="Uploaded Image")
+    elif st.session_state.get('captured_image'):
+        st.image(st.session_state.captured_image, use_column_width=True, caption="Previously captured image")
+        if st.button("🗑️ Clear Image"):
+            st.session_state.captured_image = None
+            st.experimental_rerun()
 
 def render_category_selector():
     """Render category selection dropdown"""
@@ -55,88 +59,6 @@ def render_category_selector():
     
     return category_id
 
-def render_media_capture_interface():
-    """Render media capture interface"""
-    st.subheader("1. Capture Image of Heritage Site")
-    
-    # Image capture
-    captured_image = st.camera_input("Take a photo of the temple, mosque, church, or other cultural site", key="heritage_camera")
-    
-    # File upload alternative
-    uploaded_file = st.file_uploader("Or upload an image file", type=["jpg", "jpeg", "png"])
-    
-    if captured_image is not None:
-        st.session_state.captured_image = captured_image
-        st.success("✅ Photo captured successfully!")
-        st.image(captured_image, use_column_width=True, caption="Captured Image")
-    elif uploaded_file is not None:
-        st.session_state.captured_image = uploaded_file
-        st.success("✅ File uploaded successfully!")
-        st.image(uploaded_file, use_column_width=True, caption="Uploaded Image")
-    elif st.session_state.get('captured_image'):
-        st.image(st.session_state.captured_image, use_column_width=True, caption="Previously captured image")
-        if st.button("🗑️ Clear Image"):
-            st.session_state.captured_image = None
-            st.experimental_rerun()
-
-def render_heritage_form():
-    """Render cultural heritage details form"""
-    st.markdown("---")
-    st.subheader("2. Add Details")
-    
-    with st.form("heritage_form"):
-        # Basic information
-        title = st.text_input("Title*", placeholder="Name of the heritage site (e.g., Ancient Temple, Historic Mosque)")
-        
-        # Category selection
-        category_id = render_category_selector()
-        
-        # Language selection - CORRECTED to use Indian languages
-        language = st.selectbox("Language*", 
-                               options=LANGUAGES,
-                               format_func=lambda x: x.capitalize(),
-                               help="Select the language for your description")
-        
-        # Description
-        description = st.text_area("Description*", 
-                                 placeholder="Describe the heritage site, its history, significance, architectural features, cultural importance...",
-                                 height=100)
-        
-        # Location information
-        location = st.text_input("Location*", placeholder="Village, City, District, State")
-        
-        # Coordinates (optional)
-        col1, col2 = st.columns(2)
-        with col1:
-            latitude = st.number_input("Latitude (optional)", format="%.6f")
-        with col2:
-            longitude = st.number_input("Longitude (optional)", format="%.6f")
-        
-        # Additional information
-        significance = st.text_area("Cultural Significance (optional)", 
-                                  placeholder="Why is this heritage important to the community?",
-                                  height=60)
-        
-        tags = st.text_input("Tags (optional)", placeholder="Comma-separated tags: ancient, temple, sculpture, history")
-        
-        # Consent - CORRECTED release rights options
-        st.markdown('<div class="consent-checkbox">', unsafe_allow_html=True)
-        release_rights = st.selectbox("Usage Rights*", 
-                                    options=RELEASE_RIGHTS,
-                                    format_func=lambda x: {
-                                        "creator": "I created this content",
-                                        "family_or_friend": "From family or friend", 
-                                        "downloaded": "Downloaded from source",
-                                        "NA": "Not applicable/Not sure"
-                                    }[x],
-                                    help="How can others use your contribution?")
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        submit_button = st.form_submit_button("Upload to Cultural Heritage Database")
-        
-        if submit_button:
-            handle_heritage_submission(title, description, category_id, language, location, 
-                                     latitude, longitude, significance, tags, release_rights)
 def handle_heritage_submission(title, description, category_id, language, location, 
                              latitude, longitude, significance, tags, release_rights):
     """Handle heritage form submission with proper chunked upload"""
@@ -255,3 +177,86 @@ def handle_heritage_submission(title, description, category_id, language, locati
     except Exception as e:
         status_text.error(f"❌ Unexpected error: {str(e)}")
         progress_bar.progress(0)
+
+def render_heritage_form_with_ai():
+    """Render heritage form with clean AI assistance"""
+    st.markdown("---")
+    st.subheader("2. Add Details")
+    
+    with st.form("heritage_form"):
+        title = st.text_input("Title*", placeholder="Name of the heritage site")
+        
+        description = st.text_area("Description*", 
+                                 placeholder="Describe the heritage site, its history, significance...",
+                                 height=100,
+                                 key="heritage_description")
+        
+        # AI enhancement section
+        if description and len(description) > 20:
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✨ AI Insights", help="Get cultural context from AI"):
+                    with st.spinner("Analyzing cultural significance..."):
+                        insight = get_cultural_insight({
+                            "title": title,
+                            "description": description,
+                            "content_type": "cultural_heritage"
+                        })
+                        if insight:
+                            st.session_state.ai_insight = insight
+                            st.experimental_rerun()
+            
+            with col2:
+                if st.button("🧹 Clear AI", help="Clear AI suggestions"):
+                    if 'ai_insight' in st.session_state:
+                        del st.session_state.ai_insight
+                    st.experimental_rerun()
+        
+        # Display AI insight if available
+        if 'ai_insight' in st.session_state:
+            st.success("🎯 AI Cultural Insight:")
+            st.info(st.session_state.ai_insight)
+            if st.button("💾 Use This Insight"):
+                description += f"\n\nCultural Insight: {st.session_state.ai_insight}"
+                del st.session_state.ai_insight
+                st.experimental_rerun()
+        
+        # Rest of the form
+        category_id = render_category_selector()
+        language = st.selectbox("Language*", LANGUAGES)
+        location = st.text_input("Location*", placeholder="Village, City, District, State")
+        
+        # Coordinates
+        col_loc1, col_loc2 = st.columns(2)
+        with col_loc1:
+            latitude = st.number_input("Latitude (optional)", format="%.6f")
+        with col_loc2:
+            longitude = st.number_input("Longitude (optional)", format="%.6f")
+        
+        significance = st.text_area("Cultural Significance (optional)", 
+                                  placeholder="Why is this heritage important to the community?",
+                                  height=60)
+        
+        tags = st.text_input("Tags (optional)", placeholder="temple, ancient, sculpture, history")
+        
+        release_rights = st.selectbox("Usage Rights*", 
+                                    ["public", "restricted", "private"],
+                                    help="How can others use your contribution?")
+        
+        submit_button = st.form_submit_button("📤 Upload to Heritage Database")
+        
+        if submit_button:
+            handle_heritage_submission(title, description, category_id, language, location, 
+                                     latitude, longitude, significance, tags, release_rights)
+
+def render_record_tab():
+    """Render cultural heritage recording interface with clean AI features"""
+    st.markdown('<h2 class="sub-header">Document Cultural Heritage</h2>', unsafe_allow_html=True)
+    
+    if not st.session_state.authenticated:
+        st.warning("Please login to document cultural heritage")
+        return
+    
+    load_categories()
+    render_media_capture_interface()
+    render_heritage_form_with_ai()
